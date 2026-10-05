@@ -1,0 +1,57 @@
+Clean-clone verification run.
+
+  scratch dir : /tmp/fx-demo-verify
+  clone       : git clone https://github.com/fixpoint-linux/fx-demo   -> commit 8e549bc
+  pins checked: sha256sum -c SHA256SUMS   -> 8/8 OK
+  serve step  : python3 harness/serve.py 8130 web     (8120/8130 used only to
+                avoid ports already in use on the packaging host; the README
+                documents 8080)
+  dependency  : npm install playwright && npx playwright install chromium-headless-shell
+                (the one dependency this repo does not vendor)
+  assertion   : node harness/assert.mjs http://127.0.0.1:8130/   -> EXIT 0
+
+The output below is verbatim stdout+stderr of that assertion run, against the
+cloned repo — not a working tree. TOTAL FETCHED BY THE BROWSER: 3929733 bytes,
+the same number the README quotes.
+
+proof.png and proof-serial.txt in this directory are the artifacts that run
+wrote (the rendered terminal and the raw guest 8250 capture).
+
+KERNEL: Run /fx/store/dda2c337b5145e76a4b8845dd84f1054f59beb56403dd2b931e79f3ad526c4e6-fx-init/fx-init as init process
+PROMPT SEEN: fx> 
+---- serial (guest 8250), tail ----
+fx-init: pivoted to tmpfs root (magic 0x1021994)
+fx-init: warning: control socket failed
+fx> cat /etc/hostname
+fixboxfx> cksum /bin/fxctl
+1217607440 210768 /bin/fxctl
+fx> cksum /bin/init
+2017035490 825300 /bin/init
+fx> cat /etc/passwd
+root:x:0:0::/home/root:/bin/sh
+fx> fx-init: boot-ok v7
+seq 1 3 | head -n 2
+1
+2
+fx> 
+---- .xterm-rows textContent ----
+"Freeing initrd memory: 2444K\nFreeing unused kernel image (initmem) memory: 192K\nWrite protecting kernel text and read-only data: 1392k\nRun /fx/store/dda2c337b5145e76a4b8845dd84f1054f59beb56403dd2b931e79f3ad526c4e6-f\nx-init/fx-init as init process\nfx-init: store from kernel command line fx.store=/fx/store\nfx-init: boot start store /fx/store\nfx-init: disk store: no /dev/vda  using ramfs store\nfx-init: pivot_root EINVAL (initramfs root is the namespace root)  switch_root f\nallback (MS_MOVE + chroot) applied\nfx-init: pivoted to tmpfs root (magic 0x1021994)\nfx-init: warning: control socket failed\nfx> cat /etc/hostname\nfixboxfx> cksum /bin/fxctl\n1217607440 210768 /bin/fxctl\nfx> cksum /bin/init\n2017035490 825300 /bin/init\nfx> cat /etc/passwd\nroot:x:0:0::/home/root:/bin/sh\nfx> fx-init: boot-ok v7\nseq 1 3 | head -n 2\n1\n2\nfx>"
+ASSERT fx-init-boot-ok-in-page: true (fx-init: boot-ok v7)
+ASSERT pivoted-to-tmpfs: true
+ASSERT rdinit-from-store: true
+ASSERT dhake-materialized-/etc (rendered 'fixbox'): true
+ASSERT dhake-/bin/fxctl-symlink-reads-through (in-guest size 210768): true
+ASSERT dhake-/bin/init-symlink-reads-through (in-guest size 825300): true
+ASSERT dhake-materialized-/etc/passwd: true
+ASSERT typed-pipeline-in-terminal: true  output-1: true  output-2: true  3-filtered: true
+---- downloaded resources (content-length as fetched) ----
+     1469   (gzip)
+     2502  xterm.css (gzip)
+    93787  libv86.js (gzip)
+    88463  xterm.mjs (gzip)
+   380456  v86.wasm (gzip)
+      169  e8e79e3e-0b69-4792-89b7-f81ffd6f479c (identity)
+    65607  seabios.bin (gzip)
+   795136  bzImage (identity)
+  2502144  initrd.xz (identity)
+TOTAL FETCHED BY THE BROWSER (bytes): 3929733

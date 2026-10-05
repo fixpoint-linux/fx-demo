@@ -51,14 +51,19 @@ wasm fetch cannot be loaded from the filesystem.
 
 ```sh
 python3 harness/serve.py 8080 web &
-npm install playwright          # or point $PLAYWRIGHT at an existing install
+npm install playwright
+npx playwright install chromium-headless-shell   # the browser playwright drives
 node harness/assert.mjs http://127.0.0.1:8080/
 ```
 
+(If you already have Playwright and a browser, skip the two installs and set
+`PLAYWRIGHT=/path/to/node_modules/playwright/index.mjs` instead.)
+
 Exit 0 and the ten assertions below are the claim; `proof.png` and
 `proof-serial.txt` are written to the current directory. **The run quoted in
-`evidence/` was made this way, against a fresh `git clone` of the pushed repo**,
-not from a working tree.
+`evidence/` was made this way, against a fresh `git clone` of the pushed repo at
+commit `8e549bc`, not from a working tree** — see `evidence/assert-output.txt`
+for the verbatim transcript, the port used, and the `sha256sum -c` result.
 
 ```
 ASSERT fx-init-boot-ok-in-page: true (fx-init: boot-ok v7)

@@ -114,6 +114,13 @@ done
 # "ELF 32-bit LSB executable, Intel i386, statically linked" / 0
 ```
 
+**MEASURED:** the `fx-core` line above, run against `fx-core` at commit
+`d6567de` (a clean tree), reproduces the 63 binaries shipped in `web/initrd.xz`
+**byte for byte** — 63/63 `sha256sum` matches, no mismatches. That command and
+that revision are therefore verified, not merely documented. The other three
+builds were captured from uncommitted working-tree state (see the README's
+revisions table) and cannot be re-derived exactly.
+
 ### Why the i386 port was work
 
 Recovered from the component reports, because a rebuild will hit the same wall:
@@ -241,8 +248,11 @@ in the repo.
 
 ```sh
 python3 harness/serve.py 8080 web &
-PLAYWRIGHT=/path/to/node_modules/playwright/index.mjs node harness/assert.mjs http://127.0.0.1:8080/
+npm install playwright && npx playwright install chromium-headless-shell
+node harness/assert.mjs http://127.0.0.1:8080/
 ```
+
+(Or skip the installs and set `PLAYWRIGHT=/path/to/node_modules/playwright/index.mjs`.)
 
 The harnesses write `proof.png` and `proof-serial.txt` into the current
 directory. `assert.mjs` exits 0 only if all ten assertions hold.

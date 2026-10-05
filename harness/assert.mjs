@@ -4,11 +4,13 @@
 // Usage: node harness/assert.mjs [baseurl]        (default http://127.0.0.1:8080/)
 //
 // Playwright is the one dependency this repo does not vendor (it ships a
-// browser, not a script). Resolution order:
+// browser, not a script). Install it with:
+//     npm install playwright && npx playwright install chromium-headless-shell
+// Resolution order:
 //   1. $PLAYWRIGHT — a path or specifier, e.g.
 //        PLAYWRIGHT=/path/to/node_modules/playwright/index.mjs node harness/assert.mjs
 //   2. the bare specifier `playwright`, resolved from this directory
-//        (npm install playwright   — or a node_modules up the tree)
+//        (as `npm install` above leaves it)
 // Either way the *browser* comes from Playwright's own cache
 // (~/.cache/ms-playwright) unless PLAYWRIGHT_BROWSERS_PATH says otherwise.
 //
