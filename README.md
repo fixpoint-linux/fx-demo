@@ -199,14 +199,27 @@ SHA256SUMS          every committed artifact, verifiable with `sha256sum -c`
 These are *known and unfixed as of the shipped image*. They are listed because a
 demo that hides them is not a demo of the real thing.
 
-* **`fx-init: warning: control socket failed` on every boot.** It does not
-  affect the boot verdict — the boot path never uses the control socket — but
-  the in-guest `fxctl` (`activate`/`rollback`/`shutdown`) is therefore
-  unavailable. Root cause not investigated.
-* **fx-init's control plane has no virtio-serial under v86.** With no
-  `virtio-console` device in this guest, the control socket cannot be reached
-  from outside the guest; the demo drives the console over the emulated 8250
-  instead. Related to the warning above.
+* **`fx-init: warning: control socket failed` on every boot — ROOT CAUSE
+  FOUND (measured).** It is not a virtio-serial problem. fx-init *does* serve
+  the control protocol on a UNIX socket (`/run/fx/control.sock`, and the
+  `tests/fxinit_boot.sh` lane drives it), but this kernel has **no socket layer
+  at all**: `CONFIG_UNIX` depends on `CONFIG_NET`, the lean config is
+  `# CONFIG_NET is not set` (`kbuild/config-i386-lean.txt:616`), so `socket(2)`
+  returns `ENOSYS`. The `--enable UNIX` the build script used to pass was
+  dropped **silently** by `olddefconfig` — corrected in `kbuild/build*.sh` and
+  documented in `docs/BUILD.md`. MEASURED in this guest lane: with the rebuilt
+  fx-init the line carries the errno verbatim
+  (`socket failed: Function not implemented — this kernel has no socket layer:
+  CONFIG_NET is not set`); the shipped image's fx-init predates that diagnostic
+  and prints the bare wording. It does not affect the boot verdict — the boot
+  path never uses the control socket — but it cannot be worked around in-guest:
+  the in-guest `fxctl` (`activate`/`rollback`/`shutdown`) is unavailable because
+  no process here can create a socket.
+* **fx-init's control plane has no virtio-serial under v86 either.** Separate
+  from the above: with no `virtio-console` device in this guest there is no
+  vport for the *other* control transport fx-init supports (the one
+  `tests/qemu_ctrl.sh` drives), so neither channel exists here and the demo
+  drives the console over the emulated 8250 instead.
 * **Post-pivot there is no `/tmp`.** `pivot_root_to_tmpfs`
   (`fx-init/zig/src/init.zig`) creates `/proc /sys /dev /run /fx /fx/disk
   /lib64 /usr /oldroot` on the new tmpfs root — `/tmp` is not among them, and

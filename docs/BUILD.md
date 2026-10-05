@@ -46,8 +46,20 @@ The hard-won gates, in the order they bit:
 * **`DEVTMPFS(+_MOUNT)`, `TMPFS`, `PROC_FS`, `PROC_SYSCTL`** — fx-init's pivot
   to a tmpfs root and its `/proc` mount.
 * **`MULTIUSER`, `FILE_LOCKING`, `FUTEX`, `EPOLL`, `EVENTFD`, `SIGNALFD`,
-  `TIMERFD`, `UNIX`, `BINFMT_SCRIPT`, `SHMEM`** — what a real PID 1 and its
+  `TIMERFD`, `BINFMT_SCRIPT`, `SHMEM`** — what a real PID 1 and its
   fork/pipe/execve pipeline need.
+* **`CONFIG_UNIX` is NOT in this kernel, and the build no longer pretends it
+  is.** `build.sh` / `build-lean.sh` used to pass `--enable UNIX`, which
+  `olddefconfig` DROPS **silently**: `CONFIG_UNIX` depends on `CONFIG_NET`, the
+  `tinyconfig` base has `# CONFIG_NET is not set`, and a dropped symbol does not
+  even appear in the resolved config (`kbuild/config-i386-lean.txt:616`;
+  `grep -c '^CONFIG_UNIX=' kbuild/config-i386-lean.txt` → `0`). The consequence
+  is visible in the guest: there is **no socket layer at all**, so `socket(2)`
+  returns `ENOSYS` and fx-init's `/run/fx/control.sock` can never come up (the
+  README's control-socket open item — this is its root cause). Enabling `UNIX`
+  means enabling `NET`, i.e. a different, much larger kernel than the one this
+  demo ships; both scripts now print `NET`/`UNIX` as `UNSET` in their
+  resolved-config check so the flag cannot be re-added unnoticed.
 * `--disable VT VT_CONSOLE VGA_CONSOLE HW_CONSOLE INPUT SERIO HID` — the
   serial-only console does not need a graphics stack; this is the 86 KB trim.
 
