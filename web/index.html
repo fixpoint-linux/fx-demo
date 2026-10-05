@@ -1,0 +1,64 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>fixpoint-linux — the real system in a browser terminal</title>
+<link rel="stylesheet" href="xterm.css">
+<style>
+  html, body { margin: 0; background: #101216; color: #c9d1d9; font: 13px/1.4 monospace; }
+  #bar { padding: 6px 10px; background: #1b1f27; border-bottom: 1px solid #2d333b; }
+  #bar b { color: #7ee787; }
+  #status { color: #8b949e; }
+  #term { height: calc(100vh - 30px); padding: 4px 8px; }
+</style>
+</head>
+<body>
+<div id="bar"><b>fixpoint-linux</b> — fx-init as PID 1, the content-addressed store, dhake materializing the rootfs, fxsh on the console — 32-bit Linux emulated by v86 — <span id="status">loading…</span></div>
+<div id="term"></div>
+
+<!-- libv86.js is the UMD browser build: it sets window.V86. -->
+<script src="libv86.js"></script>
+
+<script type="module">
+// The guest boots the REAL fixpoint-linux system: the kernel's rdinit names
+// fx-init OUT OF THE STORE (the M4 initramfs path — no disk, no bootloader),
+// fx-init mounts /proc /sys /dev, pivots to a tmpfs root, opens the
+// content-addressed store at /fx/store, finds the activated generation, execs
+// dhake to materialize /etc + /bin, and supervises the generation's services —
+// one of which is fxsh on the console. Everything below is wiring; the guest
+// binaries are the unmodified i386 build (static, 0 NEEDED).
+import { Terminal } from "./xterm.mjs";
+
+const CMDLINE =
+    "console=ttyS0 tsc=unstable" +
+    " rdinit=/fx/store/dda2c337b5145e76a4b8845dd84f1054f59beb56403dd2b931e79f3ad526c4e6-fx-init/fx-init" +
+    " fx.store=/fx/store";
+
+const status = document.getElementById("status");
+const emulator = new V86({
+    wasm_path: "v86.wasm",
+    bios: { url: "seabios.bin" },
+    bzimage: { url: "bzImage" },
+    initrd: { url: "initrd.xz" },
+    cmdline: CMDLINE,
+    // v86's bzImage loader places the initrd at the 64 MiB mark, so guest RAM
+    // must exceed 64 MiB + initrd size (the loader throws RangeError otherwise).
+    memory_size: 128 * 1024 * 1024,
+    autostart: true,
+    disable_speaker: true,
+    screen: { container: null },
+    serial_console: { xterm_lib: Terminal },
+    serial_container_xtermjs: document.getElementById("term"),
+});
+
+// Everything the 8250 sends, kept for the headless assertion and for the
+// "did the guest really run it" query (window.__serial).
+window.__serial = "";
+emulator.add_listener("serial0-output-byte", (byte) => {
+    window.__serial += String.fromCharCode(byte);
+});
+emulator.add_listener("emulator-ready", () => { status.textContent = "emulator ready, booting kernel…"; });
+emulator.add_listener("emulator-started", () => { status.textContent = "running (serial console: COM1 / ttyS0)"; });
+</script>
+</body>
+</html>
