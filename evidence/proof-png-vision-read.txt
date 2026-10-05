@@ -6,37 +6,46 @@ cannot be reading a buffer that is not on screen.
 
 Instrument: the local DeepSeek vision model (deepseek-v4-flash-vision-exp),
 handed evidence/proof.png as a data: URI and asked to transcribe the visible
-text verbatim.
+text verbatim, in order.
 
-Below is the guest-transcript region of its answer, as it returned it. The
-model also reported the page's status-bar line ("fixpoint-linux - fx-init as
-PID 1 ... running (serial console: COM1 / ttyS0)"), which is HTML chrome above
-the terminal, omitted here. The transcript itself matches the README's boot
-transcript line for line, and the numbers the assertions key on are all
-present: 'boot-ok v7', 'fixbox', '1217607440 210768 /bin/fxctl',
-'2017035490 825300 /bin/init', 'root:x:0:0:', and the '1'/'2' with no '3'.
+Below is its answer as returned. Two character-level artifacts in it are the
+model's OCR, NOT the page, and are recorded here so the file is not read as a
+transcript: it drops the first letter of some left-edge words ("fxpoint-linux"
+for the status bar's "fixpoint-linux", "fxboxfx>" for "fixboxfx>") and reads the
+letter O as a digit ("fx-ls-abF0aF" for "fx-ls-abFOaF"). The rendered text in
+the screenshot, checked against the DOM dump in assert-output.txt, is correct;
+the terminal scrollback in the image ends on the `ls /tmp` rows.
 
-Freeing initrd memory: 2444K
-Freeing unused kernel image (initmem) memory: 192K
-Write protecting kernel text and read-only data: 1392K
-Run /fx/store/dda2c337b5145e76a4b8845dd84f1054f59beb56403dd2b931e79f3ad526c4e6-f
-x-init/fx-init as init process
-fx-init: store from kernel command line fx.store=/fx/store
-fx-init: boot start store /fx/store
-fx-init: disk store: no /dev/vda using ramfs store
-fx-init: pivot_root EINVAL (initramfs root is the namespace root) switch_root f
-allback (MS_MOVE + chroot) applied
-fx-init: pivoted to tmpfs root (magic 0x1021994)
-fx-init: warning: control socket failed
+Here is the transcription of the terminal region, top to bottom, followed by the status bar text.
+
+```text
+fx-init: warning: no control channel: /run/fx/control.sock (socket failed: Funct
+ion not implemented  this kernel has no socket layer: CONFIG_NET is not set) and
+ no virtio control port  fxctl cannot connect in this guest
 fx> cat /etc/hostname
-fixboxfx> cksum /bin/fxctl
+fxboxfx> cksum /bin/fxctl
 1217607440 210768 /bin/fxctl
 fx> cksum /bin/init
-2017035490 825300 /bin/init
+3239201204 826524 /bin/init
 fx> cat /etc/passwd
 root:x:0:0::/home/root:/bin/sh
-fx> fx-init: boot-ok v7
+fx> fx-init: boot-ok v5
 seq 1 3 | head -n 2
 1
 2
+fx> ls /bin
+{"name":"dhake","size":402376,"mode":493}
+{"name":"fakesvc","size":1106800,"mode":493}
+{"name":"fx-activate","size":952196,"mode":493}
+{"name":"fxctl","size":210768,"mode":493}
+{"name":"init","size":826524,"mode":493}
+fx> ls /tmp
+{"name":"fx-ls-DbeaLF","size":200,"mode":448}
+{"name":"fx-ls-abF0aF","size":140,"mode":448}
 fx>
+```
+
+Status bar text:
+```text
+fxpoint-linux — fx-init as PID 1, the content-addressed store, dhake materializing the roots, fxsh on the console — 32-bit Linux emulated by v86 — running (serial console: COM1 / ttyS0)
+```

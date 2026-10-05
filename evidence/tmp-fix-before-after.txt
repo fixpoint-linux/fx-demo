@@ -1,0 +1,98 @@
+The /tmp regression: the same assertion, OLD image vs NEW image.
+
+fx-init 675e801 fixed a real bug — post-pivot the tmpfs root had no /tmp, so
+every `fx-*` stage (they all mkdtemp a hardcoded /tmp/<stage>-XXXXXX template)
+failed in the console shell. The bug had NO fireable regression test in its own
+repo: fx-init's console lane (tests/qemu_console.sh) drives `seq | head`, which
+needs no /tmp, and pins exact prompt counts. The demo's assertion is where the
+regression test now lives.
+
+INSTRUMENT (identical for both halves — this is the asymmetry, not two
+different checks): harness/assert.mjs as committed at 34684ca, driving the real
+page in headless chromium, typing `ls /bin` and `ls /tmp` into the guest over
+xterm.js -> serial0_send -> the emulated 8250 -> fxsh:
+
+  OLD image = the PREVIOUS commit's web/ (71af537, initrd.xz sha256 83579980…,
+              CMDLINE rdinit=/fx/store/dda2c337…-fx-init/fx-init)
+  NEW image = this commit's web/    (34684ca, initrd.xz sha256 15f82729…,
+              CMDLINE rdinit=/fx/store/85adaec9…-fx-init/fx-init)
+
+Both runs boot to `fx-init: boot-ok` and agree on every other assertion. Two
+things move, and only one of them is the point:
+
+  * the two /tmp assertions — FALSE on the OLD image, TRUE on the NEW one. The
+    guest says `error: Mkdtemp` for both commands, which is the bug verbatim.
+  * `dhake-/bin/init-symlink-reads-through` — also false on the OLD image,
+    because the assertion now quotes the NEW fx-init's in-guest size (826524 vs
+    the old 825300). That is the binary having changed, not a regression.
+
+OLD exits 1, NEW exits 0.
+
+================================================================
+OLD image (71af537)  — exit code 1, /tmp assertions FALSE
+================================================================
+ASSERT fx-init-boot-ok-in-page: true (fx-init: boot-ok v7)
+ASSERT pivoted-to-tmpfs: true
+ASSERT rdinit-from-store: true
+ASSERT dhake-materialized-/etc (rendered 'fixbox'): true
+ASSERT dhake-/bin/fxctl-symlink-reads-through (in-guest size 210768): true
+ASSERT dhake-/bin/init-symlink-reads-through (in-guest size 826524): false
+ASSERT dhake-materialized-/etc/passwd: true
+ASSERT typed-pipeline-in-terminal: true  output-1: true  output-2: true  3-filtered: true
+ASSERT post-pivot-/tmp-writable (ls /bin runs, no Mkdtemp): false
+ASSERT post-pivot-/tmp-lists-a-mkdtemp-scratch-dir (ls /tmp): false
+---- downloaded resources (content-length as fetched) ----
+     1469   (gzip)
+     2502  xterm.css (gzip)
+    93787  libv86.js (gzip)
+    88463  xterm.mjs (gzip)
+   380456  v86.wasm (gzip)
+      169  0e0ad92c-aa8d-4d6a-85e1-06649f1116f3 (identity)
+    65607  seabios.bin (gzip)
+   795136  bzImage (identity)
+  2502144  initrd.xz (identity)
+TOTAL FETCHED BY THE BROWSER (bytes): 3929733
+
+---- the guest's own serial around the two commands (OLD) ----
+fx> ls /bin
+[31m[1merror[0m[2m[1m: [0mMkdtemp
+fx> ls /tmp
+[31m[1merror[0m[2m[1m: [0mMkdtemp
+fx> 
+
+================================================================
+NEW image (34684ca)  — exit code 0, /tmp assertions TRUE
+================================================================
+ASSERT fx-init-boot-ok-in-page: true (fx-init: boot-ok v5)
+ASSERT pivoted-to-tmpfs: true
+ASSERT rdinit-from-store: true
+ASSERT dhake-materialized-/etc (rendered 'fixbox'): true
+ASSERT dhake-/bin/fxctl-symlink-reads-through (in-guest size 210768): true
+ASSERT dhake-/bin/init-symlink-reads-through (in-guest size 826524): true
+ASSERT dhake-materialized-/etc/passwd: true
+ASSERT typed-pipeline-in-terminal: true  output-1: true  output-2: true  3-filtered: true
+ASSERT post-pivot-/tmp-writable (ls /bin runs, no Mkdtemp): true
+ASSERT post-pivot-/tmp-lists-a-mkdtemp-scratch-dir (ls /tmp): true
+---- downloaded resources (content-length as fetched) ----
+     1468   (gzip)
+     2502  xterm.css (gzip)
+    93787  libv86.js (gzip)
+    88463  xterm.mjs (gzip)
+   380456  v86.wasm (gzip)
+      169  7a514a14-d96a-4a44-bbb8-768854dbebac (identity)
+    65607  seabios.bin (gzip)
+   795136  bzImage (identity)
+  2498888  initrd.xz (identity)
+TOTAL FETCHED BY THE BROWSER (bytes): 3926476
+
+---- the guest's own serial around the two commands (NEW) ----
+fx> ls /bin
+{"name":"dhake","size":402376,"mode":493}
+{"name":"fakesvc","size":1106800,"mode":493}
+{"name":"fx-activate","size":952196,"mode":493}
+{"name":"fxctl","size":210768,"mode":493}
+{"name":"init","size":826524,"mode":493}
+fx> ls /tmp
+{"name":"fx-ls-DbeaLF","size":200,"mode":448}
+{"name":"fx-ls-abFOaF","size":140,"mode":448}
+fx> 

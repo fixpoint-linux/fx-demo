@@ -74,9 +74,10 @@ Exit 0 and every assertion below is the claim; `proof.png` and
 `evidence/` was made this way, against a fresh `git clone` of the pushed repo,
 not from a working tree** — `evidence/assert-output.txt` is its verbatim
 transcript, including the scratch dir, the `sha256sum -c SHA256SUMS` result and
-the port used. (That clone was at `8e549bc`, the commit that introduced the
+the port used. (That clone was at `34684ca`, the commit that introduced the
 shipped `web/` bytes; `SHA256SUMS` passes and `web/` is byte-identical on the
-head of `main`.)
+head of `main`. `evidence/tmp-fix-before-after.txt` is the same assertion run
+against the *previous* image, where the two `/tmp` assertions fail.)
 
 ```
 ASSERT fx-init-boot-ok-in-page: true (fx-init: boot-ok v5)
