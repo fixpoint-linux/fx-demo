@@ -14,25 +14,35 @@ the actual fixpoint-linux system running on it:
 
 The kernel, the store, `fx-init`, `dhake` and every `fx-*` stage are genuine
 builds of the fixpoint-linux components — the emulator is emulating a PC, not
-simulating fixpoint. **Total download: 3,929,733 bytes (3.75 MiB).**
+simulating fixpoint. **Total download: 3,926,476 bytes (3.74 MiB).**
 
 ```
-Run /fx/store/dda2c337…-fx-init/fx-init as init process
+Run /fx/store/85adaec9…-fx-init/fx-init as init process
 fx-init: store from kernel command line fx.store=/fx/store
 fx-init: disk store: no /dev/vda — using ramfs store
 fx-init: pivot_root EINVAL (initramfs root is the namespace root) — switch_root fallback (MS_MOVE + chroot) applied
 fx-init: pivoted to tmpfs root (magic 0x1021994)
+fx-init: warning: no control channel: /run/fx/control.sock (socket failed: Function not implemented — this kernel has no socket layer: CONFIG_NET is not set) and no virtio control port — fxctl cannot connect in this guest
 fx> cat /etc/hostname
 fixboxfx> cksum /bin/fxctl
 1217607440 210768 /bin/fxctl
 fx> cksum /bin/init
-2017035490 825300 /bin/init
+3239201204 826524 /bin/init
 fx> cat /etc/passwd
 root:x:0:0::/home/root:/bin/sh
-fx> fx-init: boot-ok v7
+fx> fx-init: boot-ok v5
 seq 1 3 | head -n 2
 1
 2
+fx> ls /bin
+{"name":"dhake","size":402376,"mode":493}
+{"name":"fakesvc","size":1106800,"mode":493}
+{"name":"fx-activate","size":952196,"mode":493}
+{"name":"fxctl","size":210768,"mode":493}
+{"name":"init","size":826524,"mode":493}
+fx> ls /tmp
+{"name":"fx-ls-OfIMGE","size":140,"mode":448}
+{"name":"fx-ls-cgNbjD","size":200,"mode":448}
 fx>
 ```
 
@@ -69,45 +79,51 @@ shipped `web/` bytes; `SHA256SUMS` passes and `web/` is byte-identical on the
 head of `main`.)
 
 ```
-ASSERT fx-init-boot-ok-in-page: true (fx-init: boot-ok v7)
+ASSERT fx-init-boot-ok-in-page: true (fx-init: boot-ok v5)
 ASSERT pivoted-to-tmpfs: true
 ASSERT rdinit-from-store: true
 ASSERT dhake-materialized-/etc (rendered 'fixbox'): true
 ASSERT dhake-/bin/fxctl-symlink-reads-through (in-guest size 210768): true
-ASSERT dhake-/bin/init-symlink-reads-through (in-guest size 825300): true
+ASSERT dhake-/bin/init-symlink-reads-through (in-guest size 826524): true
 ASSERT dhake-materialized-/etc/passwd: true
 ASSERT typed-pipeline-in-terminal: true  output-1: true  output-2: true  3-filtered: true
-TOTAL FETCHED BY THE BROWSER (bytes): 3929733
+ASSERT post-pivot-/tmp-writable (ls /bin runs, no Mkdtemp): true
+ASSERT post-pivot-/tmp-lists-a-mkdtemp-scratch-dir (ls /tmp): true
+TOTAL FETCHED BY THE BROWSER (bytes): 3926476
 ```
 
 `docs/BOOT.md` explains why each of those is evidence rather than decoration.
+The last two are the regression test for the `/tmp` fix — `evidence/
+tmp-fix-before-after.txt` is the same assertion run against the **previous**
+image, where both are `false` and the guest answers `ls /bin` with
+`error: Mkdtemp`.
 
 ## The numbers (MEASURED, not estimated)
 
-3,929,733 bytes is not a sum of file sizes: it is the sum of the
+3,926,476 bytes is not a sum of file sizes: it is the sum of the
 `content-length` of every response the browser actually received in the passing
 run, with the server applying `Content-Encoding: gzip`.
 
 | file | raw | sent |
 |---|---|---|
-| `initrd.xz` — the store + the 63 fx-core i386 binaries + fx-init | 2,502,144 | 2,502,144 (xz: incompressible) |
+| `initrd.xz` — the store + the 63 fx-core i386 binaries + fx-init | 2,498,888 | 2,498,888 (xz: incompressible) |
 | `v86.wasm` | 2,007,347 | 380,456 |
 | `bzImage` (i386, linux-6.12.19 `tinyconfig` + fragment) | 795,136 | 795,136 (extension-less: the server does not gzip it) |
 | `libv86.js` | 359,825 | 93,787 |
 | `xterm.mjs` | 344,970 | 88,463 |
 | `seabios.bin` | 131,072 | 65,607 |
 | `xterm.css` | 7,112 | 2,502 |
-| `index.html` | 2,755 | 1,469 |
-| | | **3,929,733** |
+| `index.html` | 2,755 | 1,468 |
+| | | **3,926,476** |
 
-Same page served with `identity` encoding: 6,150,361 bytes (the same eight
+Same page served with `identity` encoding: 6,147,105 bytes (the same eight
 assets uncompressed). For scale, a `qemu-wasm` route to the same guest is
 ~40 MB raw / ~10–13 MB compressed.
 
 **Caveat, stated not hidden:** 169 bytes of that total is a single response
 chromium makes that the page's server does *not* serve (a UUID path; the
 server's own request log lists only the 8 assets). Excluding it, the page's own
-assets total **3,929,564** bytes. `vgabios.bin` and `v86-fallback.wasm` are
+assets total **3,926,307** bytes. `vgabios.bin` and `v86-fallback.wasm` are
 never fetched — the console is serial-only, and the fallback wasm is only
 requested if the primary fails to load.
 
@@ -135,37 +151,39 @@ Why:
 
 Component repos are **not** submodules here — the shipped artifacts are the
 anchors. `web/bzImage` and `web/initrd.xz` are pinned by sha256, and the tree
-below is the exact revision (and dirty-state) observed at packaging time.
+below is the exact revision (all **clean, committed** trees this time — the
+earlier guest had to be captured from uncommitted working-tree patches in three
+of the six repos) observed at packaging time.
 
 | component | revision | tree at packaging | shipped payload |
 |---|---|---|---|
-| [fx-core](https://github.com/fixpoint-linux/fx-core) | `d6567de4a3988edb97858e5d82c17483fa0b9080` | clean | 63 static i386 binaries (`fxsh` + the `fx-*` stages) → `/usr/fx-core/bin` |
-| [fx-init](https://github.com/fixpoint-linux/fx-init) | `48cae93e3cefcbaa856fcce8c5f983ee7135417e` + **uncommitted** i386 port | dirty | `fx-init` (PID 1), `fxctl`, `fx-activate` |
-| [fxstore](https://github.com/fixpoint-linux/fxstore) | `f55a1acf69d77aec92a1eb53f6c8ea836efdba72` + uncommitted i386 port | dirty | hash input only (never executes) |
-| [dhake](https://github.com/fixpoint-linux/dhake) | `a76f65d160ae8508bcbdd6b709b4aa6a28e24ebd` + uncommitted `build.zig`/`sandbox.zig` | dirty | `dhake.com` (materializes the rootfs) |
+| [fx-core](https://github.com/fixpoint-linux/fx-core) | `669187010053b8ea37f179756b06dad73043e150` | clean | 63 static i386 binaries (`fxsh` + the `fx-*` stages) → `/usr/fx-core/bin` |
+| [fx-init](https://github.com/fixpoint-linux/fx-init) | `675e801cdb7441cc0abf35a8fcee10a7c6bfd468` | clean | `fx-init` (PID 1), `fxctl`, `fx-activate` |
+| [fxstore](https://github.com/fixpoint-linux/fxstore) | `f7962b681c6405d539baf6f41e93bf26e5739f55` | clean | hash input only (never executes) |
+| [dhake](https://github.com/fixpoint-linux/dhake) | `12dc4fbc477c089fbade2ad20372e2f71a624db0` | clean | `dhake.com` (materializes the rootfs) |
 | [dhall-c](https://github.com/fixpoint-linux/dhall-c) | `565d728d147426e747a6e74f0ed09c53331053b1` | clean | hash input only |
 | [datalog-dafsa](https://github.com/fixpoint-linux/datalog-dafsa) | `59f7d855bd4d113e59798a0de92b9a2ad386661c` | clean | hash input only |
 
-Two things follow, and both are honest limitations rather than details:
+**The store paths are content hashes of the source trees.** The `rdinit=` hash
+in `web/index.html` (`85adaec9…-fx-init`) is the hash of the `fx-init` tree at
+`675e801`; the `dhake` store dir names the tree fx-init *vendors*
+(`fx-init/vendor/dhake`, `eb16bcb`) even though the shipped `dhake.com` is built
+from the sibling at `12dc4fb` — the store names its inputs, it does not vouch
+for the binary you put in the directory. Re-running the provisioning against a
+different `fx-init` tree yields a different name, which is the store doing its
+job; `image/build-store.sh` prints the one to use.
 
-1. **The i386 port of `fx-init`/`fxstore`/`dhake` was uncommitted working-tree
-   state** when the guest was captured. Those patches are described in
-   `docs/BUILD.md` but are not retrievable as a commit from the remotes; if you
-   rebuild from today's `HEAD` you get equivalent binaries, not identical ones.
-2. **The store paths are content hashes of the source trees.** The `rdinit=`
-   hash in `web/index.html` (`dda2c337…-fx-init`) is the hash of the `fx-init`
-   tree as it was at packaging. MEASURED while writing this: re-running the
-   provisioning against today's `fx-init` tree yields `651b4e34…`, because that
-   tree now carries further fixes. The store is doing exactly what it is
-   designed to do — the demo just has to be told the new name
-   (`image/build-store.sh` prints it).
+**What is verified reproducible** (all MEASURED this packaging):
 
-**What *is* verified reproducible:** the 63 fx-core binaries in the shipped
-image are **byte-identical** to a fresh
-`cd fx-core && zig build -Dtarget=x86-linux-musl -Doptimize=ReleaseSmall` of
-`d6567de` (63/63 sha256 match, measured). And `image/mkinitramfs.sh` produces a
-**byte-identical** `initrd.xz` from the same store — two consecutive runs give
-the same sha256 (that took the `--reproducible` delta, see `docs/BUILD.md`).
+* every binary in the shipped image is **byte-identical** to a fresh clean-tree
+  build — 63/63 fx-core sha256 matches, plus `fx-init`, `fx-activate`, `fxctl`,
+  `dhake.com` and `fakesvc` (each image copy vs the build of the commit in the
+  table above);
+* `image/mkinitramfs.sh` produces a **byte-identical** `initrd.xz` from the
+  same store — two consecutive runs give the same sha256 (that took the
+  `--reproducible` delta, see `docs/BUILD.md`);
+* the store dirs are stable across repeated `activate_paths` runs against
+  quiescent trees (two runs, identical closure).
 
 ## Layout
 
@@ -173,7 +191,7 @@ the same sha256 (that took the `--reproducible` delta, see `docs/BUILD.md`).
 web/                the page and everything it fetches (committed, no CDN)
   index.html          the page: v86 wiring + the CMDLINE
   bzImage             i386 linux-6.12.19  (sha256 25be0d53…)
-  initrd.xz           the store + userland (sha256 83579980…)
+  initrd.xz           the store + userland (sha256 15f82729…)
   libv86.js v86.wasm seabios.bin         (v86 0.5.470, Apache/BSD 2-clause)
   xterm.mjs xterm.css                    (@xterm/xterm 6.0.0, MIT)
 kbuild/             the kernel build recipe (podman, debian:stable)
@@ -189,53 +207,87 @@ harness/            boot / drive / assert
 docs/               BUILD.md (rebuild), BOOT.md (the boot chain and its evidence)
 evidence/           the clean-clone run: assert-output.txt, proof.png,
                     proof-serial.txt (the guest's 8250 capture), proof-png-vision-read.txt
-                    (an independent vision-model read of the screenshot), image-contents.txt
+                    (an independent vision-model read of the screenshot), image-contents.txt,
+                    tmp-fix-before-after.txt (the /tmp assertion vs the PREVIOUS image)
 licenses/           v86 (BSD-2-Clause) and xterm.js (MIT) license + package metadata
 SHA256SUMS          every committed artifact, verifiable with `sha256sum -c`
 ```
+
+## Fixed since the previous image (the three items it listed as OPEN)
+
+The previous guest shipped components built *before* these commits, so it
+reported all three of these as open. Each is now fixed upstream and in this
+image; the fix is quoted in the run above, and `evidence/tmp-fix-before-after.txt`
+is the assertion run against the **previous** image next to this one's.
+
+* **Post-pivot there was no `/tmp` — FIXED (fx-init `675e801`).** The old
+  `pivot_root_to_tmpfs` created `/proc /sys /dev /run /fx /fx/disk /lib64 /usr
+  /oldroot` on the new tmpfs root and `/tmp` was not among them, so the tmpfs
+  root — which *replaces* the initramfs layer that had it — had no `/tmp` at
+  all. Nine `fx-*` stages `mkdtemp` a hardcoded `/tmp/<stage>-XXXXXX` template,
+  so the guest answered `ls /bin` with `error: Mkdtemp` and `cksum /tmp` with
+  `cannot open '/tmp'` + `error: OpenFailed`. `init.zig` now creates
+  `/newroot/tmp` with `mkdir(0o1777)` **and** `chmod(0o1777)` (the umask masks
+  `mkdir`'s mode) — deliberately not folded into the shared dir list, which is
+  `0755`; the mode is the point. MEASURED in this guest: `ls /bin` now returns
+  its five rows and `ls /tmp` lists the `fx-ls-XXXXXX` scratch dirs of the
+  preceding commands (i.e. the directory is not merely present but *used*).
+  That is exactly the pair of assertions added to `harness/assert.mjs` — this
+  bug had no fireable regression test in its own repo (fx-init's console lane
+  drives only `seq | head`, which needs no `/tmp`), so the demo's assertion is
+  where one now lives.
+* **The control-socket warning was uninformative — FIXED (fx-init `675e801`).**
+  The *behaviour* it reports is unchanged and is still open (next section): this
+  kernel has no socket layer. What is fixed is the line. It was
+  `fx-init: warning: control socket failed`; it is now
+  `fx-init: warning: no control channel: /run/fx/control.sock (socket failed:
+  Function not implemented — this kernel has no socket layer: CONFIG_NET is not
+  set) and no virtio control port — fxctl cannot connect in this guest`, naming
+  the path, the failing step, the errno, the structural cause and the
+  consequence. `setup_ctrl` now records the failing step and its errno
+  (`ctrlFail`) instead of returning a bare `-1`.
+* **`fxsh`'s unknown-stage error was unhelpful — FIXED (fx-core `6691870`).**
+  The refusal itself is correct and stays (below); the message now says why:
+  `fx-shell: unknown stage '<name>' (not one of the 31 pipeline stages): a stage
+  runs only when its command declares a typed signature, so the line can be
+  typechecked before anything runs — fxsh does NOT execute arbitrary PATH
+  binaries. The stage name has no 'fx-' prefix (the binary fx-ls is the stage
+  `ls`).` The error *value* is unchanged (`error.UnknownCommand`).
 
 ## Open items (short, honest)
 
 These are *known and unfixed as of the shipped image*. They are listed because a
 demo that hides them is not a demo of the real thing.
 
-* **`fx-init: warning: control socket failed` on every boot — ROOT CAUSE
-  FOUND (measured).** It is not a virtio-serial problem. fx-init *does* serve
-  the control protocol on a UNIX socket (`/run/fx/control.sock`, and the
-  `tests/fxinit_boot.sh` lane drives it), but this kernel has **no socket layer
-  at all**: `CONFIG_UNIX` depends on `CONFIG_NET`, the lean config is
-  `# CONFIG_NET is not set` (`kbuild/config-i386-lean.txt:616`), so `socket(2)`
-  returns `ENOSYS`. The `--enable UNIX` the build script used to pass was
-  dropped **silently** by `olddefconfig` — corrected in `kbuild/build*.sh` and
-  documented in `docs/BUILD.md`. MEASURED in this guest lane: with the rebuilt
-  fx-init the line carries the errno verbatim
-  (`socket failed: Function not implemented — this kernel has no socket layer:
-  CONFIG_NET is not set`); the shipped image's fx-init predates that diagnostic
-  and prints the bare wording. It does not affect the boot verdict — the boot
-  path never uses the control socket — but it cannot be worked around in-guest:
-  the in-guest `fxctl` (`activate`/`rollback`/`shutdown`) is unavailable because
-  no process here can create a socket.
+* **The control plane cannot work in this guest — the pinned kernel has no
+  socket layer (still open; a kernel change, not a code one).** fx-init *does*
+  serve the control protocol on a UNIX socket (`/run/fx/control.sock`, and the
+  `tests/fxinit_boot.sh` lane drives it), but `CONFIG_UNIX` depends on
+  `CONFIG_NET`, the lean config is `# CONFIG_NET is not set`
+  (`kbuild/config-i386-lean.txt:616`), and with `NET` off the kernel stubs the
+  whole socket layer, so `socket(2)` returns `ENOSYS`. The `--enable UNIX` the
+  build script used to pass was dropped **silently** by `olddefconfig` —
+  corrected in `kbuild/build*.sh` and documented in `docs/BUILD.md`. MEASURED
+  in this guest: the errno is reported verbatim by the rebuilt fx-init (the line
+  quoted above). It does not affect the boot verdict — the boot path never uses
+  the control socket — but it cannot be worked around in-guest: the in-guest
+  `fxctl` (`activate`/`rollback`/`shutdown`) is unavailable because no process
+  here can create a socket. The real fix is a kernel rebuild with `CONFIG_NET=y`
+  (i.e. a different, much larger kernel than the one this demo ships).
 * **fx-init's control plane has no virtio-serial under v86 either.** Separate
   from the above: with no `virtio-console` device in this guest there is no
   vport for the *other* control transport fx-init supports (the one
   `tests/qemu_ctrl.sh` drives), so neither channel exists here and the demo
   drives the console over the emulated 8250 instead.
-* **Post-pivot there is no `/tmp`.** `pivot_root_to_tmpfs`
-  (`fx-init/zig/src/init.zig`) creates `/proc /sys /dev /run /fx /fx/disk
-  /lib64 /usr /oldroot` on the new tmpfs root — `/tmp` is not among them, and
-  the tmpfs root replaces the initramfs layer that had it. So any `fx-*` stage
-  that `mkdtemp`s under a hardcoded `/tmp` fails in the console shell. OBSERVED
-  LIVE in this guest: `ls /bin` → `error: Mkdtemp`. It is **pre-existing in
-  fx-init's own QEMU image lane** too — that harness only exercises
-  `seq | head`, which needs no `/tmp`, so it never surfaced. The assertion
-  deliberately uses stages that avoid `/tmp` (`cat`, `cksum`, `seq`, `head`)
-  rather than papering over it. Fix is one line either side: add `/tmp` to the
-  pivot dir list, or `Mkdir /tmp` in the boot buildfile.
-* **`fxsh` is not a `PATH` shell.** It dispatches exactly its 31 `fx-*` pipeline
-  stages; `/bin/fxctl` is `fx-shell: unknown stage '/bin/fxctl'`. A module such
-  as `realpath` takes its path operand *from the pipeline* (`text_operand`) —
-  feeding it as argv is `TooManyArgs` — while `cksum`/`cat` accept a literal
-  path. This is why the assertions use `cksum /bin/fxctl`.
+* **`fxsh` is not a `PATH` shell, by design.** It dispatches exactly its 31
+  `fx-*` pipeline stages and refuses everything else; `/bin/fxctl` is an
+  unknown stage. 32 of the 63 shipped binaries are therefore unreachable from
+  the console. That is the contract — a line runs only if it typechecks — not a
+  defect: a PATH fallback would run commands whose stage-to-stage shapes were
+  never checked. A module such as `realpath` takes its path operand *from the
+  pipeline* (`text_operand`) — feeding it as argv is `TooManyArgs` — while
+  `cksum`/`cat` accept a literal path. This is why the assertions use
+  `cksum /bin/fxctl`.
 * **Guest memory is fixed at 128 MiB** and the initrd is placed at the 64 MiB
   mark by v86's `bzImage` loader, so the initrd must stay well under 64 MiB. It
   is 2.5 MB.

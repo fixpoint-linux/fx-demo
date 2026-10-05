@@ -79,9 +79,10 @@ that executes in the guest must be a static `elf_i386`. On an x86-64 Linux host
 those run natively, which is why the *store provisioning* below happens on the
 host rather than in the guest.
 
-Pin the checkouts at the revisions the shipped guest was built from (see the
-"Revisions" section of the README — three of the six have uncommitted i386 port
-patches, and those patches are **not** in the repos' remotes):
+Check the checkouts out at the revisions the shipped guest was built from (the
+"Revisions" section of the README has the exact hashes — **all six are ordinary
+commits**; the i386 port used to live in three uncommitted working trees here,
+which is why the current image is the first one a clean rebuild can reproduce):
 
 ```sh
 git clone https://github.com/fixpoint-linux/datalog-dafsa
@@ -126,12 +127,13 @@ done
 # "ELF 32-bit LSB executable, Intel i386, statically linked" / 0
 ```
 
-**MEASURED:** the `fx-core` line above, run against `fx-core` at commit
-`d6567de` (a clean tree), reproduces the 63 binaries shipped in `web/initrd.xz`
-**byte for byte** — 63/63 `sha256sum` matches, no mismatches. That command and
-that revision are therefore verified, not merely documented. The other three
-builds were captured from uncommitted working-tree state (see the README's
-revisions table) and cannot be re-derived exactly.
+**MEASURED:** all four build lines above, run against the clean committed trees
+in the README's revisions table, reproduce **every** binary shipped in
+`web/initrd.xz` **byte for byte** — 63/63 `fx-core` `sha256sum` matches, plus
+`fx-init`, `fx-activate`, `fxctl`, `dhake.com` and `fakesvc`. The commands and
+the revisions are therefore verified, not merely documented. (The *previous*
+guest could not be reproduced this way: three of its six components were
+captured from uncommitted working-tree state.)
 
 ### Why the i386 port was work
 
@@ -170,7 +172,10 @@ packages — `datalog-dafsa`, `dhall-c`, `fxstore` — are **hash inputs only**;
 their content never executes at boot, so their dirs carry a marker file, exactly
 as fx-init's own `tests/qemu_boot.sh` does), then runs `fx-activate`, which
 derives the generation and writes its `Dhakefile.dhall`. It prints the store dir
-that the kernel command line's `rdinit=` must name.
+that the kernel command line's `rdinit=` must name — and that string goes into
+**three** files, not one: `web/index.html`'s `CMDLINE` (the one that decides)
+and the two node twins, `harness/boot.mjs` and `harness/drive.mjs`. §4's re-pin
+check verifies the result against the archive rather than trusting the edit.
 
 ⚠️ **Run it against quiescent sources.** The store paths are hexadecimal
 *content hashes of the source trees*. MEASURED while writing this document: two
@@ -187,8 +192,8 @@ reference harness defends against this with a source-freeze step
 mkdir -p /tmp/fx/root                      # the pre-boot ROOTDIR overlay: empty for this guest
 image/mkinitramfs.sh -s /tmp/fx/store -r /tmp/fx/root \
                      -o web/initrd.xz -b /tmp/i386/fxcore/bin
-# -> web/initrd.xz   2,502,144 bytes
-#    sha256 83579980424ec1e30df6b7ef3eee2fe1222e8b9a253f2692166bd69d70d11084
+# -> web/initrd.xz   2,498,888 bytes
+#    sha256 15f82729f61a7552ce9f33a619737cad2e0c9e5c2d7f54179a376318c190cced
 ```
 
 The image is a newc cpio archive: a **prepended segment of device nodes**
@@ -224,6 +229,33 @@ measured reason:
 The image is byte-reproducible **given the store**: same store in, same
 `initrd.xz` out. It is not reproducible from *different* sources, because the
 store dir names are content hashes.
+
+### Re-pin, then verify the pin against the archive
+
+`build-store.sh` printed one store dir name. Put it into all three `CMDLINE`
+copies (`web/index.html`, `harness/boot.mjs`, `harness/drive.mjs`), refresh
+`SHA256SUMS` (`sha256sum web/* > SHA256SUMS`), and then check the edit against
+the artifact — a byte, not a string:
+
+```sh
+D=$(sed -n 's/.*rdinit=\/fx\/store\/\([0-9a-f]\{64\}\)-fx-init.*/\1/p' web/index.html)
+
+# The archive is TWO concatenated newc images (device nodes, then the tree) —
+# the kernel's initramfs unpacker walks both, but `cpio -it` stops at the first
+# TRAILER.  The *names* are plain ASCII in the stream, so read them out of the
+# decompressed bytes instead of unpacking: no `cpio`, no second image problem.
+xz -dc web/initrd.xz | grep -a -o 'fx/store/[0-9a-f]\{64\}-fx-init' | sort -u
+# -> exactly ONE line: fx/store/$D-fx-init
+xz -dc web/initrd.xz | grep -a -o '/fx/store/[0-9a-f]\{64\}-fx-init/fx-init' | sort -u
+# -> the /bin/init symlink target: the same path, leading slash, nothing else
+
+sha256sum -c SHA256SUMS
+```
+
+That pair is the claim worth making: **the only `fx-init` directory in the
+archive is the one the command line names**, and the archive's `/bin/init`
+symlink — the path the *guest* resolves — points into that same directory. If
+they disagree, the page boots a different store than the one it advertises.
 
 ---
 

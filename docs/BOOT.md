@@ -12,7 +12,7 @@ The page sets exactly one thing that matters — where PID 1 comes from:
 
 ```
 console=ttyS0 tsc=unstable \
-rdinit=/fx/store/dda2c337b5145e76a4b8845dd84f1054f59beb56403dd2b931e79f3ad526c4e6-fx-init/fx-init \
+rdinit=/fx/store/85adaec9be2e08a776bd6b3c3834a92ff59edd996be882f15fb526c9e2876cfa-fx-init/fx-init \
 fx.store=/fx/store
 ```
 
@@ -23,17 +23,23 @@ kernel from trusting a TSC that v86's emulation does not keep in sync.
 ## The chain, and the line each step prints
 
 ```
-Run /fx/store/dda2c337…-fx-init/fx-init as init process                      <- kernel: rdinit resolved
+Run /fx/store/85adaec9…-fx-init/fx-init as init process                      <- kernel: rdinit resolved
 fx-init: store from kernel command line fx.store=/fx/store                   <- fx-init: its store root
 fx-init: boot start store /fx/store                                          <- the boot decision begins
 fx-init: disk store: no /dev/vda — using ramfs store                         <- no virtio disk, so the store is the ramfs one
 fx-init: pivot_root EINVAL (initramfs root is the namespace root) — switch_root fallback (MS_MOVE + chroot) applied
 fx-init: pivoted to tmpfs root (magic 0x1021994)                             <- the M4 pivot ran and VERIFIED the fs magic
-fx-init: warning: control socket failed                                      <- OPEN ITEM, see the README
+fx-init: warning: no control channel: /run/fx/control.sock (socket failed:
+  Function not implemented — this kernel has no socket layer: CONFIG_NET is
+  not set) and no virtio control port — fxctl cannot connect in this guest    <- OPEN ITEM (kernel), see the README
 fx>                                                                          <- the console service (fxsh) spawned ~2s in
 …
-fx-init: boot-ok v7                                                          <- fx-init's own verdict
+fx-init: boot-ok v5                                                          <- fx-init's own verdict
 ```
+
+(The control line is a single, long serial line — it is wrapped here for the
+page. It was `fx-init: warning: control socket failed` in the previous image;
+what the line *reports* is still open, the line itself is not.)
 
 `boot-ok` is emitted by fx-init's own `evaluate_boot_ok`
 (`fx-init/zig/src/init.zig`), and only when **every service of the activated
@@ -53,10 +59,12 @@ as on `window.__serial`.
 | `pivoted to tmpfs root` | fx-init's `pivot_root_to_tmpfs` ran and matched `TMPFS_MAGIC`. It is a *measured* result, not a log line it prints unconditionally. |
 | `Run /fx/store/… as init process` | the kernel's own line: PID 1 was exec'd from the store, not from the initramfs. |
 | `cat /etc/hostname` → `fixbox` | the initramfs ships **no `/etc`** and the ROOTDIR overlay is empty, so the file can only exist because dhake's `etc` target copied it out of the store's generation dir. |
-| `cksum /bin/fxctl` → `1217607440 210768` | matches the host's `cksum` of `store/937bc…-fxctl/fxctl` — **same CRC, same size**. The guest is reading *through* the symlink dhake created (the buildfile's `bin` target: `Rm` + `Symlink` per package) into the content-addressed store. A dangling or missing link fails. |
-| `cksum /bin/init` → `2017035490 825300` | same, for the store's fx-init — i.e. `/bin/init` resolves to the very binary the kernel booted. |
+| `cksum /bin/fxctl` → `1217607440 210768` | matches the host's `cksum` of `store/902b83f7…-fxctl/fxctl` — **same CRC, same size**. The guest is reading *through* the symlink dhake created (the buildfile's `bin` target: `Rm` + `Symlink` per package) into the content-addressed store. A dangling or missing link fails. |
+| `cksum /bin/init` → `3239201204 826524` | same, for the store's fx-init — i.e. `/bin/init` resolves to the very binary the kernel booted. |
 | `cat /etc/passwd` → `root:x:0:0:…` | a second file from the same `Copy` sweep; one lucky file could be coincidence, a whole directory less so. |
 | `seq 1 3 \| head -n 2` → `1`, `2`, never `3` | a two-process pipeline (`fx-seq \| fx-head`) over two separate static i386 binaries with a real `fork`/`pipe`/`execve`. `head` closing the read end early is what filters `3`. This is exactly what blink-wasm could not do. |
+| `ls /bin` → five `{"name":…}` rows | every `fx-*` stage `mkdtemp`s a `/tmp/<stage>-XXXXXX` scratch dir, so a post-pivot root without `/tmp` answers this with `error: Mkdtemp` (the previous image did; `evidence/tmp-fix-before-after.txt`). Rows at all means the fix is live. |
+| `ls /tmp` → a `{"name":"fx-ls-XXXXXX"}` row | the row is the scratch dir the **previous** `fx-ls` created inside `/tmp` — so `/tmp` exists, is writable, and the stage actually used it. Not an existence check of a directory the host made: the guest made the entry, minutes into the boot. |
 
 The run also captures the browser's fetch accounting (see the README), and
 `evidence/proof.png` is the screenshot of the same session — read by an
@@ -82,6 +90,25 @@ node harness/boot.mjs web/bzImage web/initrd.xz "$(CMD)" 60 /tmp/serial.txt
 
 The store dir hashes are content hashes of the source trees the store was
 activated from. If you rebuild the userland (see `docs/BUILD.md`), the
-`dda2c337…-fx-init` segment of the command line will be **different** — the new
+`85adaec9…-fx-init` segment of the command line will be **different** — the new
 hash is printed by `image/build-store.sh`, and that is the string to put into
 `web/index.html`'s `CMDLINE`. Nothing else in the page is revision-dependent.
+
+### Verifying the pin (three places, all independent)
+
+The `rdinit=` hash is written in **three** files — `web/index.html` (what the
+page boots) and `harness/boot.mjs` / `harness/drive.mjs` (the node twins) — and
+the page's copy is the one that decides. It is pinned against the image rather
+than trusted:
+
+* the shipped `initrd.xz` carries exactly one `fx/store/*-fx-init` directory,
+  and its name is the hash on the command line;
+* `/bin/init` **inside** the shipped archive is a symlink whose target is the
+  same path — so the kernel's `rdinit=` and the guest's `/bin/init` provably
+  name the same binary, by two routes;
+* that binary's sha256 equals the sha256 of the store copy that
+  `image/build-store.sh` printed the name from — i.e. what the page boots is
+  byte-for-byte what was activated.
+
+`SHA256SUMS` then pins the archive itself, so `sha256sum -c SHA256SUMS` closes
+the loop from the committed bytes to the rule above.

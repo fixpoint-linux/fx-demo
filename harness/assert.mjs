@@ -60,13 +60,24 @@ await typeCmd("cat /etc/hostname");
 // so a PATH exec is not available; `cksum` is a file_operand stage and takes
 // the path literally, reading THROUGH the link — a dangling or absent link
 // fails instead.  MEASURED host-side: /bin/fxctl -> 210768 bytes,
-// /bin/init -> 825300 bytes (the store files' own sizes).
+// /bin/init -> 826524 bytes (the store files' own sizes).
 await typeCmd("cksum /bin/fxctl");
 await typeCmd("cksum /bin/init");
 // a second /etc file from the same Copy sweep.
 await typeCmd("cat /etc/passwd");
 // the two-stage pipeline over two separate /bin binaries (fx-seq | fx-head).
 await typeCmd("seq 1 3 | head -n 2");
+// THE /tmp REGRESSION (fx-init 675e801).  Post-pivot the tmpfs root carried
+// no /tmp — and every `fx-*` stage that takes a path actually opens a
+// `mkdtemp("/tmp/<stage>-XXXXXX")` scratch dir, so the shipped guest answered
+// `ls /bin` with `error: Mkdtemp` (the OLD image's own serial, quoted in
+// evidence/tmp-fix-before-after.txt).  fx-ls mkdtemps too, so `ls /bin`
+// producing rows at all is the fix; `ls /tmp` then LISTS the scratch dir the
+// previous fx-ls left there, which is the writable-/tmp proof rather than a
+// mere existence check.  Asserted on window.__serial — the full 8250 capture,
+// not the visible viewport — because the listing is several rows.
+await typeCmd("ls /bin");
+await typeCmd("ls /tmp");
 
 // (3) fx-init's own boot verdict, awaited in the page.
 let bootOk = false;
@@ -91,7 +102,13 @@ const a3 = serial.includes("Run /fx/store/") && serial.includes("as init process
 const a4 = lines.some((l) => l.includes("fixbox"));          // dhake materialized /etc/hostname (fx-cat prints it with NO trailing newline, so the row runs into the next prompt)
 const a5 = rows.includes("seq 1 3 | head -n 2");
 const a6 = rows.includes("210768 /bin/fxctl");
-const a6b = rows.includes("825300 /bin/init");
+const a6b = rows.includes("826524 /bin/init");
+// the /tmp fix, in two halves: `ls /bin` produced ROWS of /bin (it used to be
+// `error: Mkdtemp`), and `ls /tmp` shows a `fx-ls-XXXXXX` scratch dir inside
+// /tmp — i.e. mkdtemp succeeded and the directory is writable.  The `!Mkdtemp`
+// half is what fails on the pre-675e801 image.
+const a8 = serial.includes('"name":"init"') && !serial.includes("Mkdtemp");
+const a9 = /"name":"fx-ls-[A-Za-z0-9]{6}"/.test(serial);
 const a7 = rows.includes("root:x:0:0:");                     // a second dhake-materialized /etc file
 const hasOne = lines.includes("1");
 const hasTwo = lines.includes("2");
@@ -101,9 +118,11 @@ console.log("ASSERT pivoted-to-tmpfs:", a2);
 console.log("ASSERT rdinit-from-store:", a3);
 console.log("ASSERT dhake-materialized-/etc (rendered 'fixbox'):", a4);
 console.log("ASSERT dhake-/bin/fxctl-symlink-reads-through (in-guest size 210768):", a6);
-console.log("ASSERT dhake-/bin/init-symlink-reads-through (in-guest size 825300):", a6b);
+console.log("ASSERT dhake-/bin/init-symlink-reads-through (in-guest size 826524):", a6b);
 console.log("ASSERT dhake-materialized-/etc/passwd:", a7);
 console.log("ASSERT typed-pipeline-in-terminal:", a5, " output-1:", hasOne, " output-2:", hasTwo, " 3-filtered:", !hasThree);
+console.log("ASSERT post-pivot-/tmp-writable (ls /bin runs, no Mkdtemp):", a8);
+console.log("ASSERT post-pivot-/tmp-lists-a-mkdtemp-scratch-dir (ls /tmp):", a9);
 
 console.log("---- downloaded resources (content-length as fetched) ----");
 let total = 0;
@@ -113,4 +132,4 @@ console.log(`TOTAL FETCHED BY THE BROWSER (bytes): ${total}`);
 await page.screenshot({ path: "proof.png" });
 fs.writeFileSync("proof-serial.txt", serial);
 await browser.close();
-process.exit(a1 && a2 && a3 && a4 && a5 && a6 && a6b && a7 && hasOne && hasTwo && !hasThree ? 0 : 1);
+process.exit(a1 && a2 && a3 && a4 && a5 && a6 && a6b && a7 && a8 && a9 && hasOne && hasTwo && !hasThree ? 0 : 1);
