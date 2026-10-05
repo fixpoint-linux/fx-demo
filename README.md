@@ -59,11 +59,14 @@ node harness/assert.mjs http://127.0.0.1:8080/
 (If you already have Playwright and a browser, skip the two installs and set
 `PLAYWRIGHT=/path/to/node_modules/playwright/index.mjs` instead.)
 
-Exit 0 and the ten assertions below are the claim; `proof.png` and
+Exit 0 and every assertion below is the claim; `proof.png` and
 `proof-serial.txt` are written to the current directory. **The run quoted in
-`evidence/` was made this way, against a fresh `git clone` of the pushed repo at
-commit `8e549bc`, not from a working tree** — see `evidence/assert-output.txt`
-for the verbatim transcript, the port used, and the `sha256sum -c` result.
+`evidence/` was made this way, against a fresh `git clone` of the pushed repo,
+not from a working tree** — `evidence/assert-output.txt` is its verbatim
+transcript, including the scratch dir, the `sha256sum -c SHA256SUMS` result and
+the port used. (That clone was at `8e549bc`, the commit that introduced the
+shipped `web/` bytes; `SHA256SUMS` passes and `web/` is byte-identical on the
+head of `main`.)
 
 ```
 ASSERT fx-init-boot-ok-in-page: true (fx-init: boot-ok v7)
@@ -184,7 +187,9 @@ harness/            boot / drive / assert
   boot.mjs drive.mjs  v86 in node, serial to stdout / scripted sessions
   assert.mjs          the Playwright proof
 docs/               BUILD.md (rebuild), BOOT.md (the boot chain and its evidence)
-evidence/           proof-serial.txt, assert-output.txt, proof.png, image-contents.txt
+evidence/           the clean-clone run: assert-output.txt, proof.png,
+                    proof-serial.txt (the guest's 8250 capture), proof-png-vision-read.txt
+                    (an independent vision-model read of the screenshot), image-contents.txt
 licenses/           v86 (BSD-2-Clause) and xterm.js (MIT) license + package metadata
 SHA256SUMS          every committed artifact, verifiable with `sha256sum -c`
 ```

@@ -29,8 +29,12 @@ const CMDLINE =
     " rdinit=/fx/store/dda2c337b5145e76a4b8845dd84f1054f59beb56403dd2b931e79f3ad526c4e6-fx-init/fx-init" +
     " fx.store=/fx/store";
 
-const [bz = path.join(WEB, "bzImage"), initrd = path.join(WEB, "initrd.xz"), cmdline = CMDLINE,
-       secs = "30", out = ""] = process.argv.slice(2);
+const argv = process.argv.slice(2);
+const bz = argv[0] || path.join(WEB, "bzImage");
+const initrd = argv[1] || path.join(WEB, "initrd.xz");
+const cmdline = argv[2] || CMDLINE;
+const secs = argv[3] || "30";
+const out = argv[4] || "";
 
 const buf = (p) => {
     const b = fs.readFileSync(p);

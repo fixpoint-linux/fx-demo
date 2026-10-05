@@ -255,4 +255,4 @@ node harness/assert.mjs http://127.0.0.1:8080/
 (Or skip the installs and set `PLAYWRIGHT=/path/to/node_modules/playwright/index.mjs`.)
 
 The harnesses write `proof.png` and `proof-serial.txt` into the current
-directory. `assert.mjs` exits 0 only if all ten assertions hold.
+directory. `assert.mjs` exits 0 only if every assertion it prints holds.

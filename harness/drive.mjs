@@ -23,8 +23,13 @@ const CMDLINE =
     " rdinit=/fx/store/dda2c337b5145e76a4b8845dd84f1054f59beb56403dd2b931e79f3ad526c4e6-fx-init/fx-init" +
     " fx.store=/fx/store";
 
-const [cmdsFile, secs, out, bz = path.join(WEB, "bzImage"),
-       initrd = path.join(WEB, "initrd.xz"), cmdline = CMDLINE] = process.argv.slice(2);
+const argv = process.argv.slice(2);
+const cmdsFile = argv[0];
+const secs = argv[1] || "90";
+const out = argv[2] || "";
+const bz = argv[3] || path.join(WEB, "bzImage");
+const initrd = argv[4] || path.join(WEB, "initrd.xz");
+const cmdline = argv[5] || CMDLINE;
 if (!cmdsFile) {
     process.stderr.write("usage: node harness/drive.mjs <cmds-file> [secs] [serial-out]\n");
     process.exit(2);

@@ -60,8 +60,9 @@ as on `window.__serial`.
 
 The run also captures the browser's fetch accounting (see the README), and
 `evidence/proof.png` is the screenshot of the same session — read by an
-independent vision model, which returned the transcript line for line, so the
-page really *renders* it and the assertions are not reading a hidden buffer.
+independent vision model, which returned the transcript line for line
+(`evidence/proof-png-vision-read.txt`), so the page really *renders* it and the
+assertions are not reading a hidden buffer.
 
 ## The two harnesses are different instruments
 

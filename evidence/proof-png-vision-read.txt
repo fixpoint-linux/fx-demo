@@ -1,0 +1,42 @@
+Independent read of evidence/proof.png by a vision model.
+
+The assertion reads the DOM (.xterm-rows) and window.__serial. This is the
+separate check that the page really RENDERS the transcript, so the assertions
+cannot be reading a buffer that is not on screen.
+
+Instrument: the local DeepSeek vision model (deepseek-v4-flash-vision-exp),
+handed evidence/proof.png as a data: URI and asked to transcribe the visible
+text verbatim.
+
+Below is the guest-transcript region of its answer, as it returned it. The
+model also reported the page's status-bar line ("fixpoint-linux - fx-init as
+PID 1 ... running (serial console: COM1 / ttyS0)"), which is HTML chrome above
+the terminal, omitted here. The transcript itself matches the README's boot
+transcript line for line, and the numbers the assertions key on are all
+present: 'boot-ok v7', 'fixbox', '1217607440 210768 /bin/fxctl',
+'2017035490 825300 /bin/init', 'root:x:0:0:', and the '1'/'2' with no '3'.
+
+Freeing initrd memory: 2444K
+Freeing unused kernel image (initmem) memory: 192K
+Write protecting kernel text and read-only data: 1392K
+Run /fx/store/dda2c337b5145e76a4b8845dd84f1054f59beb56403dd2b931e79f3ad526c4e6-f
+x-init/fx-init as init process
+fx-init: store from kernel command line fx.store=/fx/store
+fx-init: boot start store /fx/store
+fx-init: disk store: no /dev/vda using ramfs store
+fx-init: pivot_root EINVAL (initramfs root is the namespace root) switch_root f
+allback (MS_MOVE + chroot) applied
+fx-init: pivoted to tmpfs root (magic 0x1021994)
+fx-init: warning: control socket failed
+fx> cat /etc/hostname
+fixboxfx> cksum /bin/fxctl
+1217607440 210768 /bin/fxctl
+fx> cksum /bin/init
+2017035490 825300 /bin/init
+fx> cat /etc/passwd
+root:x:0:0::/home/root:/bin/sh
+fx> fx-init: boot-ok v7
+seq 1 3 | head -n 2
+1
+2
+fx>
