@@ -1,0 +1,65 @@
+# Deploy the fx-demo browser terminal to fixpointlinux.org/fx-demo (node-infra).
+#
+# The page is static: web/index.html plus the guest it boots (bzImage +
+# initrd.xz) and v86's wasm/BIOS. Nothing is compiled here — the guest's
+# components (fx-init, fx-core, fxstore, dhake) are built as i386 static
+# binaries by the recipe in image/ and kbuild/, and the resulting image is
+# committed with its SHA256SUMS pin. Rebuilding the guest is a deliberate
+# manual step (see README), not part of a deploy.
+#
+# The workflow assembles a deploy tarball from web/ and ships it over
+# restricted SSH to node-infra's fx-demo-receive forced command (stages +
+# promotes to /srv/www/fx-demo, served by Caddy at fixpointlinux.org/fx-demo).
+name: Deploy fx-demo
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: deploy-fx-demo
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Verify the shipped artifacts against their pin
+        # The page boots these bytes; if they do not match SHA256SUMS the
+        # deploy should stop rather than publish an image nobody can check.
+        run: sha256sum -c SHA256SUMS
+
+      - name: Assemble deploy bundle
+        run: |
+          set -euo pipefail
+          rm -rf /tmp/fxdemo
+          mkdir -p /tmp/fxdemo/site
+          cp -r web/. /tmp/fxdemo/site/
+          tar -czf /tmp/fxdemo/fx-demo.tar.gz -C /tmp/fxdemo site
+          ls -la /tmp/fxdemo/fx-demo.tar.gz
+
+      - name: Deploy via restricted SSH
+        env:
+          DEPLOY_SSH_KEY: ${{ secrets.DEPLOY_SSH_KEY }}
+          DEPLOY_HOST: ${{ secrets.DEPLOY_HOST }}
+          DEPLOY_USER: ${{ secrets.DEPLOY_USER }}
+          DEPLOY_HOST_KEY: ${{ secrets.DEPLOY_HOST_KEY }}
+        run: |
+          set -euo pipefail
+          umask 077
+          mkdir -p ~/.ssh
+          echo "$DEPLOY_SSH_KEY" > ~/.ssh/deploy_key
+          echo "$DEPLOY_HOST_KEY" > ~/.ssh/known_hosts
+          chmod 600 ~/.ssh/deploy_key ~/.ssh/known_hosts
+          cat /tmp/fxdemo/fx-demo.tar.gz | ssh -i ~/.ssh/deploy_key \
+            -o IdentitiesOnly=yes \
+            -o StrictHostKeyChecking=yes \
+            -o UserKnownHostsFile=~/.ssh/known_hosts \
+            "${DEPLOY_USER}@${DEPLOY_HOST}" 'cat > /dev/null'
